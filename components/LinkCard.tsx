@@ -25,12 +25,15 @@ const LinkCard: React.FC<LinkCardProps> = ({
 
     const cardClasses = `
         group relative transition-all duration-300 rounded-2xl
-        ${isBatchEditMode ? 'cursor-pointer' : 'hover:-translate-y-1 hover:shadow-xl hover:shadow-accent/10'}
-        ${isSelected
-            ? 'bg-rose-500/10 border-rose-400/50 ring-2 ring-rose-400/30'
-            : 'bg-white/70 dark:bg-slate-900/50 border border-slate-200/60 dark:border-white/5 hover:border-accent/40 dark:hover:border-accent/40 hover:bg-white/90 dark:hover:bg-slate-900/80'
+        border bg-white dark:bg-slate-900/50 backdrop-blur-sm
+        ${isBatchEditMode
+            ? 'cursor-pointer border-slate-200 dark:border-white/10'
+            : 'hover:-translate-y-1 hover:shadow-lg hover:shadow-accent/5 cursor-pointer'
         }
-        backdrop-blur-md
+        ${isSelected
+            ? 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-50 dark:bg-rose-900/10'
+            : 'border-slate-200/80 dark:border-white/5 hover:border-accent/50 dark:hover:border-accent/40'
+        }
         ${isDetailedView ? 'p-5' : 'p-3.5'}
     `;
 
@@ -135,8 +138,8 @@ const LinkCard: React.FC<LinkCardProps> = ({
             {/* Selection indicator for batch mode */}
             {isBatchEditMode && (
                 <div className={`absolute top-2 right-2 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${isSelected
-                        ? 'bg-rose-500 border-rose-500 text-white'
-                        : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800'
+                    ? 'bg-rose-500 border-rose-500 text-white'
+                    : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800'
                     }`}>
                     {isSelected && (
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">

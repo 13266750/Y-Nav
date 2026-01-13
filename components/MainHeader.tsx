@@ -184,10 +184,10 @@ const MainHeader: React.FC<MainHeaderProps> = ({
             type="text"
             placeholder={
               searchMode === 'internal'
-                ? '搜索站内内容...'
+                ? '搜索站内资源...'
                 : selectedSearchSource
-                  ? `在${selectedSearchSource.name}搜索`
-                  : '搜索站外内容...'
+                  ? `在 ${selectedSearchSource.name} 搜索`
+                  : '搜索全网内容...'
             }
             value={searchQuery}
             onChange={(e) => onSearchQueryChange(e.target.value)}
@@ -196,11 +196,17 @@ const MainHeader: React.FC<MainHeaderProps> = ({
                 onExternalSearch();
               }
             }}
-            className="w-full h-full pl-10 pr-10 bg-transparent text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 outline-none focus:ring-0"
+            className="w-full h-full pl-10 pr-20 bg-transparent text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 outline-none focus:ring-0"
             style={{ fontSize: '14px' }}
             inputMode="search"
             enterKeyHint="search"
           />
+
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none select-none">
+            <kbd className="hidden md:inline-flex h-5 items-center gap-1 rounded border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-1.5 font-mono text-[10px] font-medium text-slate-500 dark:text-slate-400">
+              <span className="text-xs">⌘</span>K
+            </kbd>
+          </div>
         </div>
 
         {searchMode === 'external' && (

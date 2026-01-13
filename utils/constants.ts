@@ -1,5 +1,5 @@
 // Local Storage Keys
-export const LOCAL_STORAGE_KEY = 'cloudnav_data_cache';
+export const LOCAL_STORAGE_KEY = 'cloudnav_data_cache_v2';
 export const WEBDAV_CONFIG_KEY = 'cloudnav_webdav_config';
 export const AI_CONFIG_KEY = 'cloudnav_ai_config';
 export const SEARCH_CONFIG_KEY = 'cloudnav_search_config';

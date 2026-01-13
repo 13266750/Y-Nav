@@ -201,7 +201,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Footer Actions */}
       {!isSidebarCollapsed && (
-        <div className="px-3 py-3 border-t border-slate-100/60 dark:border-white/5 shrink-0">
+        <div className="px-3 py-3 border-t border-slate-200/80 dark:border-white/10 shrink-0">
           <div className="flex items-center gap-1.5">
             <button
               onClick={onOpenImport}

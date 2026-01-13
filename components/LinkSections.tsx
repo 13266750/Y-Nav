@@ -60,14 +60,33 @@ const LinkSections: React.FC<LinkSectionsProps> = ({
 }) => {
   const showPinnedSection = pinnedLinks.length > 0 && !searchQuery && (selectedCategory === 'all');
   const showMainSection = (selectedCategory !== 'all' || searchQuery);
-  const gridClassName = siteCardStyle === 'detailed'
-    ? 'grid-cols-[repeat(auto-fill,minmax(260px,1fr))]'
-    : 'grid-cols-[repeat(auto-fill,minmax(180px,1fr))]';
+  const gridClassName = 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 6) return '凌晨好';
+    if (hour < 11) return '上午好';
+    if (hour < 14) return '中午好';
+    if (hour < 19) return '下午好';
+    return '晚上好';
+  };
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 lg:px-8 pb-12">
-      {/* Content wrapper with max-width for ultra-wide screens */}
-      <div className="max-w-[1800px] mx-auto">
+    <div className="flex-1 overflow-y-auto px-4 lg:px-8 pb-12 scrollbar-hide">
+      {/* Content wrapper with max-width */}
+      <div className="max-w-[1600px] mx-auto">
+
+        {/* Dashboard Header / Greeting */}
+        {!searchQuery && selectedCategory === 'all' && (
+          <div className="pt-8 pb-2">
+            <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-1">
+              {getGreeting()}，<span className="text-accent">Y-Nav</span>
+            </h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">
+              准备开始高效的一天了吗？
+            </p>
+          </div>
+        )}
 
         {!showPinnedSection && !showMainSection && (
           <div className="flex justify-center pt-12">
