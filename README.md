@@ -29,12 +29,12 @@
 
 1. **Fork 本仓库**到你的 GitHub 账号
 
-2. **创建 KV 命名空间**
+2. **创建 KV 命名空间** (Workers 专用，与 Pages 区分)
    ```bash
    # 登录 Cloudflare
    npx wrangler login
    
-   # 创建 KV
+   # 创建 Workers 专用 KV
    npm run kv:create
    ```
    记下返回的 `id`，填入 `wrangler.toml` 的 `kv_namespaces.id` 字段。

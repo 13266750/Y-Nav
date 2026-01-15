@@ -25,7 +25,7 @@ interface KVNamespaceInterface {
 }
 
 interface Env {
-    YNAV_KV: KVNamespaceInterface;
+    YNAV_WORKER_KV: KVNamespaceInterface;
     SYNC_PASSWORD?: string;
     __STATIC_CONTENT: KVNamespace;
 }
@@ -67,7 +67,7 @@ const corsHeaders = {
 function jsonResponse(data: any, status = 200): Response {
     return new Response(JSON.stringify(data), {
         status,
-        headers: { 
+        headers: {
             'Content-Type': 'application/json',
             ...corsHeaders
         }
@@ -128,7 +128,7 @@ async function handleApiSync(request: Request, env: Env): Promise<Response> {
 }
 
 async function handleGet(env: Env): Promise<Response> {
-    const data = await env.YNAV_KV.get(KV_MAIN_DATA_KEY, 'json');
+    const data = await env.YNAV_WORKER_KV.get(KV_MAIN_DATA_KEY, 'json');
     if (!data) {
         return jsonResponse({ success: true, data: null, message: '云端暂无数据' });
     }
@@ -142,7 +142,7 @@ async function handlePost(request: Request, env: Env): Promise<Response> {
         return jsonResponse({ success: false, error: '缺少 data 字段' }, 400);
     }
 
-    const existingData = await env.YNAV_KV.get(KV_MAIN_DATA_KEY, 'json') as YNavSyncData | null;
+    const existingData = await env.YNAV_WORKER_KV.get(KV_MAIN_DATA_KEY, 'json') as YNavSyncData | null;
 
     // 版本冲突检测
     if (existingData && body.expectedVersion !== undefined) {
@@ -166,7 +166,7 @@ async function handlePost(request: Request, env: Env): Promise<Response> {
         }
     };
 
-    await env.YNAV_KV.put(KV_MAIN_DATA_KEY, JSON.stringify(dataToSave));
+    await env.YNAV_WORKER_KV.put(KV_MAIN_DATA_KEY, JSON.stringify(dataToSave));
     return jsonResponse({ success: true, data: dataToSave, message: '同步成功' });
 }
 
@@ -179,7 +179,7 @@ async function handleBackup(request: Request, env: Env): Promise<Response> {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('.')[0];
     const backupKey = `${KV_BACKUP_PREFIX}${timestamp}`;
 
-    await env.YNAV_KV.put(backupKey, JSON.stringify(body.data), {
+    await env.YNAV_WORKER_KV.put(backupKey, JSON.stringify(body.data), {
         expirationTtl: BACKUP_TTL_SECONDS
     });
 
@@ -194,12 +194,12 @@ async function handleRestore(request: Request, env: Env): Promise<Response> {
         return jsonResponse({ success: false, error: '无效的备份 key' }, 400);
     }
 
-    const backupData = await env.YNAV_KV.get(backupKey, 'json') as YNavSyncData | null;
+    const backupData = await env.YNAV_WORKER_KV.get(backupKey, 'json') as YNavSyncData | null;
     if (!backupData) {
         return jsonResponse({ success: false, error: '备份不存在或已过期' }, 404);
     }
 
-    const existingData = await env.YNAV_KV.get(KV_MAIN_DATA_KEY, 'json') as YNavSyncData | null;
+    const existingData = await env.YNAV_WORKER_KV.get(KV_MAIN_DATA_KEY, 'json') as YNavSyncData | null;
     const now = Date.now();
     let rollbackKey: string | null = null;
 
@@ -207,7 +207,7 @@ async function handleRestore(request: Request, env: Env): Promise<Response> {
     if (existingData) {
         const rollbackTimestamp = new Date(now).toISOString().replace(/[:.]/g, '-').split('.')[0];
         rollbackKey = `${KV_BACKUP_PREFIX}rollback-${rollbackTimestamp}`;
-        await env.YNAV_KV.put(rollbackKey, JSON.stringify({
+        await env.YNAV_WORKER_KV.put(rollbackKey, JSON.stringify({
             ...existingData,
             meta: { ...existingData.meta, updatedAt: now, deviceId: body.deviceId || existingData.meta.deviceId }
         }), { expirationTtl: BACKUP_TTL_SECONDS });
@@ -224,17 +224,17 @@ async function handleRestore(request: Request, env: Env): Promise<Response> {
         }
     };
 
-    await env.YNAV_KV.put(KV_MAIN_DATA_KEY, JSON.stringify(restoredData));
+    await env.YNAV_WORKER_KV.put(KV_MAIN_DATA_KEY, JSON.stringify(restoredData));
     return jsonResponse({ success: true, data: restoredData, rollbackKey });
 }
 
 async function handleListBackups(env: Env): Promise<Response> {
-    const list = await env.YNAV_KV.list({ prefix: KV_BACKUP_PREFIX });
+    const list = await env.YNAV_WORKER_KV.list({ prefix: KV_BACKUP_PREFIX });
 
     const backups = await Promise.all(list.keys.map(async (key) => {
         let meta: SyncMetadata | null = null;
         try {
-            const data = await env.YNAV_KV.get(key.name, 'json') as YNavSyncData | null;
+            const data = await env.YNAV_WORKER_KV.get(key.name, 'json') as YNavSyncData | null;
             meta = data?.meta || null;
         } catch {
             meta = null;
@@ -296,7 +296,7 @@ async function handleStaticAssets(request: Request, env: Env, ctx: ExecutionCont
 export default {
     async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
         const url = new URL(request.url);
-        
+
         // API 路由
         if (url.pathname.startsWith('/api/sync')) {
             return handleApiSync(request, env);

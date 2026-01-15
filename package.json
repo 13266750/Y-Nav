@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "deploy:workers": "npm run build && wrangler deploy",
     "deploy:pages": "npm run build && wrangler pages deploy dist --project-name=y-nav",
-    "kv:create": "wrangler kv:namespace create YNAV_KV",
+    "kv:create": "wrangler kv:namespace create YNAV_WORKER_KV",
     "dev:workers": "npm run build && wrangler dev"
   },
   "dependencies": {
