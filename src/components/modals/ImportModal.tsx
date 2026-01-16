@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { X, Upload, FileText, ArrowRight, Check, AlertCircle, FolderInput, ListTree, Database } from 'lucide-react';
 import { Category, LinkItem, SearchConfig, AIConfig } from '../../types';
 import { parseBookmarks } from '../../services/bookmarkParser';
@@ -15,6 +15,24 @@ interface ImportModalProps {
     closeOnBackdrop?: boolean;
 }
 
+interface ParsedImportLink extends LinkItem {
+    folderPath?: string[];
+    isDuplicate?: boolean;
+}
+
+interface FolderOption {
+    key: string;
+    label: string;
+    path: string[];
+    count: number;
+}
+
+const getFolderKey = (path?: string[]) => JSON.stringify(path || []);
+const getFolderLabel = (path?: string[]) => {
+    if (!path || path.length === 0) return '根目录';
+    return path.join(' / ');
+};
+
 const ImportModal: React.FC<ImportModalProps> = ({
     isOpen,
     onClose,
@@ -30,13 +48,8 @@ const ImportModal: React.FC<ImportModalProps> = ({
     const [file, setFile] = useState<File | null>(null);
     const [analyzing, setAnalyzing] = useState(false);
 
-    // Analysis Results
-    const [newLinksCount, setNewLinksCount] = useState(0);
-    const [duplicateCount, setDuplicateCount] = useState(0);
-    const [newCategoriesCount, setNewCategoriesCount] = useState(0);
-
     // Staging Data
-    const [parsedLinks, setParsedLinks] = useState<LinkItem[]>([]);
+    const [parsedLinks, setParsedLinks] = useState<ParsedImportLink[]>([]);
     const [parsedCategories, setParsedCategories] = useState<Category[]>([]);
     const [parsedSearchConfig, setParsedSearchConfig] = useState<SearchConfig | null>(null);
     const [parsedAIConfig, setParsedAIConfig] = useState<AIConfig | null>(null);
@@ -45,12 +58,107 @@ const ImportModal: React.FC<ImportModalProps> = ({
     const [importMode, setImportMode] = useState<'original' | 'merge'>('original');
     const [targetCategoryId, setTargetCategoryId] = useState<string>(categories[0]?.id || 'common');
     const [importType, setImportType] = useState<'html' | 'json'>('html');
+    const [selectedFolderKeys, setSelectedFolderKeys] = useState<Set<string>>(new Set());
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const jsonFileInputRef = useRef<HTMLInputElement>(null);
 
+    const folderOptions = useMemo<FolderOption[]>(() => {
+        if (importType !== 'html') return [];
+        const folderMap = new Map<string, { path: string[]; count: number }>();
+        parsedLinks.forEach(link => {
+            const path = link.folderPath || [];
+            const key = getFolderKey(path);
+            const existing = folderMap.get(key);
+            if (existing) {
+                existing.count += 1;
+            } else {
+                folderMap.set(key, { path, count: 1 });
+            }
+        });
+        return Array.from(folderMap.entries())
+            .map(([key, value]) => ({
+                key,
+                label: getFolderLabel(value.path),
+                path: value.path,
+                count: value.count
+            }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+    }, [importType, parsedLinks]);
+
+    useEffect(() => {
+        if (importType !== 'html' || step !== 'preview') return;
+        if (folderOptions.length === 0) return;
+        setSelectedFolderKeys(prev => {
+            if (prev.size > 0) return prev;
+            return new Set(folderOptions.map(option => option.key));
+        });
+    }, [folderOptions, importType, step]);
+
+    const selectedLinks = useMemo(() => {
+        if (importType !== 'html') return parsedLinks;
+        if (folderOptions.length === 0) return parsedLinks;
+        if (selectedFolderKeys.size === 0) return [];
+        return parsedLinks.filter(link => selectedFolderKeys.has(getFolderKey(link.folderPath)));
+    }, [folderOptions.length, importType, parsedLinks, selectedFolderKeys]);
+
+    const uniqueNewLinks = useMemo(
+        () => selectedLinks.filter(link => !link.isDuplicate),
+        [selectedLinks]
+    );
+
+    const duplicateCount = useMemo(
+        () => selectedLinks.filter(link => link.isDuplicate).length,
+        [selectedLinks]
+    );
+
+    const selectedCategoryIds = useMemo(() => {
+        return new Set(uniqueNewLinks.map(link => link.categoryId));
+    }, [uniqueNewLinks]);
+
+    const filteredCategories = useMemo(() => {
+        if (importType !== 'html') return parsedCategories;
+        return parsedCategories.filter(category => selectedCategoryIds.has(category.id));
+    }, [importType, parsedCategories, selectedCategoryIds]);
+
+    const newLinksCount = uniqueNewLinks.length;
+    const existingCategoryNames = useMemo(
+        () => new Set(categories.map(category => category.name)),
+        [categories]
+    );
+    const newCategoriesCount = useMemo(() => {
+        return filteredCategories.filter(category => !existingCategoryNames.has(category.name)).length;
+    }, [existingCategoryNames, filteredCategories]);
+
+    const allFoldersSelected = folderOptions.length > 0 && selectedFolderKeys.size === folderOptions.length;
+    const isFolderSelectionEmpty = importType === 'html'
+        && folderOptions.length > 0
+        && selectedFolderKeys.size === 0;
+
+    const toggleFolderSelection = (key: string) => {
+        setSelectedFolderKeys(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) {
+                next.delete(key);
+            } else {
+                next.add(key);
+            }
+            return next;
+        });
+    };
+
+    const toggleAllFolders = () => {
+        setSelectedFolderKeys(prev => {
+            if (folderOptions.length === 0) return prev;
+            if (prev.size === folderOptions.length) {
+                return new Set();
+            }
+            return new Set(folderOptions.map(option => option.key));
+        });
+    };
+
     // Parse JSON backup file
-    const parseJsonBackup = async (file: File): Promise<{ links: LinkItem[], categories: Category[], searchConfig?: SearchConfig, aiConfig?: AIConfig }> => {
+    const parseJsonBackup = async (file: File): Promise<{ links: ParsedImportLink[]; categories: Category[]; searchConfig?: SearchConfig; aiConfig?: AIConfig }> => {
         const text = await file.text();
         const data = JSON.parse(text);
 
@@ -76,10 +184,8 @@ const ImportModal: React.FC<ImportModalProps> = ({
         setParsedCategories([]);
         setParsedSearchConfig(null);
         setParsedAIConfig(null);
-        setNewLinksCount(0);
-        setDuplicateCount(0);
-        setNewCategoriesCount(0);
         setImportType('html');
+        setSelectedFolderKeys(new Set());
     };
 
     const handleClose = () => {
@@ -96,7 +202,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
         setImportType(type);
 
         try {
-            let result: { links: LinkItem[], categories: Category[], searchConfig?: SearchConfig, aiConfig?: AIConfig };
+            let result: { links: ParsedImportLink[]; categories: Category[]; searchConfig?: SearchConfig; aiConfig?: AIConfig };
 
             if (type === 'html') {
                 result = await parseBookmarks(selectedFile);
@@ -107,29 +213,19 @@ const ImportModal: React.FC<ImportModalProps> = ({
             // 2. Diff Logic
             const existingUrls = new Set(existingLinks.map(l => l.url.trim().replace(/\/$/, ''))); // Normalize URLs slightly
 
-            const uniqueNewLinks: LinkItem[] = [];
-            let duplicates = 0;
-
-            result.links.forEach(link => {
+            const parsedWithDuplicates = result.links.map(link => {
                 const normalizedUrl = link.url.trim().replace(/\/$/, '');
-                if (existingUrls.has(normalizedUrl)) {
-                    duplicates++;
-                } else {
-                    uniqueNewLinks.push(link);
-                }
+                return {
+                    ...link,
+                    isDuplicate: existingUrls.has(normalizedUrl)
+                };
             });
 
-            // 3. Category Diff
-            const existingCategoryNames = new Set(categories.map(c => c.name));
-            const uniqueNewCategories = result.categories.filter(c => !existingCategoryNames.has(c.name));
-
-            setParsedLinks(uniqueNewLinks);
-            setParsedCategories(uniqueNewCategories);
+            setParsedLinks(parsedWithDuplicates);
+            setParsedCategories(result.categories);
             setParsedSearchConfig(result.searchConfig || null);
             setParsedAIConfig(result.aiConfig || null);
-            setNewLinksCount(uniqueNewLinks.length);
-            setDuplicateCount(duplicates);
-            setNewCategoriesCount(uniqueNewCategories.length);
+            setSelectedFolderKeys(new Set());
 
             setStep('preview');
         } catch (error) {
@@ -144,7 +240,8 @@ const ImportModal: React.FC<ImportModalProps> = ({
     };
 
     const executeImport = () => {
-        let finalLinks = [...parsedLinks];
+        const linksToImport = uniqueNewLinks.map(({ isDuplicate, folderPath, ...link }) => link);
+        let finalLinks = [...linksToImport];
         let finalCategories: Category[] = [];
 
         if (importMode === 'merge') {
@@ -167,7 +264,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
             // Valid new categories to add
             const categoriesToAdd: Category[] = [];
 
-            parsedCategories.forEach(pc => {
+            filteredCategories.forEach(pc => {
                 if (nameToIdMap.has(pc.name)) {
                     // Category exists, we don't add it.
                     // But we need to know its ID to remap links.
@@ -184,7 +281,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
             // Remap links
             finalLinks = finalLinks.map(link => {
                 // Find the name of the category this link was assigned to in the parser
-                const originalCat = parsedCategories.find(c => c.id === link.categoryId)
+                const originalCat = filteredCategories.find(c => c.id === link.categoryId)
                     || categories.find(c => c.id === link.categoryId); // Fallback
 
                 if (originalCat && nameToIdMap.has(originalCat.name)) {
@@ -317,12 +414,14 @@ const ImportModal: React.FC<ImportModalProps> = ({
                                 </div>
                             </div>
 
-                            {newLinksCount === 0 ? (
+                            {newLinksCount === 0 && (
                                 <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 rounded-lg text-sm">
                                     <AlertCircle size={16} />
-                                    <span>未发现新链接，所有链接已存在。</span>
+                                    <span>{isFolderSelectionEmpty ? '未选择任何文件夹。' : '未发现新链接，所有链接已存在。'}</span>
                                 </div>
-                            ) : (
+                            )}
+
+                            {newLinksCount > 0 && (
                                 <div className="space-y-3">
                                     <label className="text-sm font-medium dark:text-slate-300">导入方式</label>
 
@@ -357,6 +456,45 @@ const ImportModal: React.FC<ImportModalProps> = ({
                                             </div>
                                         </div>
                                     </label>
+                                </div>
+                            )}
+
+                            {importType === 'html' && folderOptions.length > 0 && (
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm font-medium dark:text-slate-300">选择导入文件夹</label>
+                                        <button
+                                            type="button"
+                                            onClick={toggleAllFolders}
+                                            className="text-xs text-slate-500 hover:text-accent transition-colors"
+                                        >
+                                            {allFoldersSelected ? '取消全选' : '全选'}
+                                        </button>
+                                    </div>
+                                    <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700/50">
+                                        {folderOptions.map(option => (
+                                            <label
+                                                key={option.key}
+                                                className="flex items-center justify-between px-3 py-2 text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                                            >
+                                                <span className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedFolderKeys.has(option.key)}
+                                                        onChange={() => toggleFolderSelection(option.key)}
+                                                        className="rounded border-slate-300 text-accent focus:ring-accent/40"
+                                                    />
+                                                    <span className="truncate">{option.label}</span>
+                                                </span>
+                                                <span className="text-xs text-slate-400">{option.count}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                    {selectedFolderKeys.size === 0 && (
+                                        <div className="text-xs text-amber-600 dark:text-amber-400">
+                                            请至少选择一个文件夹
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

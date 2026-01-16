@@ -10,8 +10,12 @@ const generateId = () => {
   return Date.now().toString(36) + Math.random().toString(36).substring(2);
 };
 
+export interface ParsedBookmarkLink extends LinkItem {
+  folderPath: string[];
+}
+
 export interface ImportResult {
-  links: LinkItem[];
+  links: ParsedBookmarkLink[];
   categories: Category[];
 }
 
@@ -20,17 +24,24 @@ export const parseBookmarks = async (file: File): Promise<ImportResult> => {
   const parser = new DOMParser();
   const doc = parser.parseFromString(text, 'text/html');
 
-  const links: LinkItem[] = [];
+  const links: ParsedBookmarkLink[] = [];
   const categories: Category[] = [];
   const categoryMap = new Map<string, string>(); // Name -> ID
+  const genericRootFolders = new Set(['Bookmarks Bar', '书签栏', 'Other Bookmarks', '其他书签']);
+
+  const normalizeCategoryName = (path: string[]) => {
+    if (path.length === 0) return 'common';
+    const last = path[path.length - 1].trim();
+    if (!last) return 'common';
+    if (path.length === 1 && genericRootFolders.has(last)) {
+      return 'common';
+    }
+    return last;
+  };
 
   // Helper to get or create category ID
   const getCategoryId = (name: string): string => {
-    if (!name) return 'common';
-    // Normalize: remove generic folders like "Bookmarks Bar"
-    if (['Bookmarks Bar', '书签栏', 'Other Bookmarks', '其他书签'].includes(name)) {
-        return 'common';
-    }
+    if (!name || name === 'common') return 'common';
 
     if (categoryMap.has(name)) {
       return categoryMap.get(name)!;
@@ -51,7 +62,7 @@ export const parseBookmarks = async (file: File): Promise<ImportResult> => {
   // Traverse the DL/DT structure
   // Chrome structure: <DT><H3>Folder Name</H3><DL> ...items... </DL>
   
-  const traverse = (element: Element, currentCategoryName: string) => {
+  const traverse = (element: Element, currentPath: string[]) => {
     const children = Array.from(element.children);
     
     for (let i = 0; i < children.length; i++) {
@@ -66,21 +77,23 @@ export const parseBookmarks = async (file: File): Promise<ImportResult> => {
 
         if (h3 && dl) {
             // It's a folder
-            const folderName = h3.textContent || 'Unknown';
-            traverse(dl, folderName);
+            const folderName = (h3.textContent || 'Unknown').trim();
+            traverse(dl, [...currentPath, folderName]);
         } else if (a) {
             // It's a link
             const title = a.textContent || a.getAttribute('href') || 'No Title';
             const url = a.getAttribute('href');
             
             if (url && !url.startsWith('chrome://') && !url.startsWith('about:')) {
+                const folderPath = currentPath.length ? [...currentPath] : [];
                 links.push({
                     id: generateId(),
                     title: title,
                     url: url,
-                    categoryId: getCategoryId(currentCategoryName),
+                    categoryId: getCategoryId(normalizeCategoryName(folderPath)),
                     createdAt: Date.now(),
-                    icon: a.getAttribute('icon') || undefined
+                    icon: a.getAttribute('icon') || undefined,
+                    folderPath
                 });
             }
         }
@@ -90,7 +103,7 @@ export const parseBookmarks = async (file: File): Promise<ImportResult> => {
 
   const rootDl = doc.querySelector('dl');
   if (rootDl) {
-    traverse(rootDl, 'common');
+    traverse(rootDl, []);
   }
 
   return { links, categories };
