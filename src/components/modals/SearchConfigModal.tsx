@@ -34,9 +34,10 @@ const SortableSearchItem = ({
   onToggle,
   onDelete
 }: {
+  key?: any;
   source: ExternalSearchSource;
   onToggle: (id: string) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => void | Promise<void>;
 }) => {
   const {
     attributes,

@@ -50,7 +50,7 @@ const DataTab: React.FC<DataTabProps> = ({
     onTogglePrivacyGroup,
     privacyAutoUnlockEnabled,
     onTogglePrivacyAutoUnlock,
-    syncStatus = 'idle',
+    syncStatus = 'idle' as SyncStatus,
     lastSyncTime = null,
     siteSettings,
     onSiteSettingChange,

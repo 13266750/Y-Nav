@@ -82,6 +82,8 @@ function App() {
   const [syncConflictOpen, setSyncConflictOpen] = useState(false);
   const [currentConflict, setCurrentConflict] = useState<SyncConflict | null>(null);
   const hasInitialSyncRun = useRef(false);
+  const hasInitialCloudCheckCompletedRef = useRef(false);
+  const suppressNextAutoSyncRef = useRef(false);
   const autoUnlockAttemptedRef = useRef(false);
   const syncPasswordRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncPasswordRefreshIdRef = useRef(0);
@@ -184,6 +186,7 @@ function App() {
     // 当从云端恢复数据时更新本地数据
     if (data.links && data.categories) {
       updateData(data.links, data.categories);
+      suppressNextAutoSyncRef.current = true;
     }
     if (data.searchConfig) {
       restoreSearchConfig(data.searchConfig);
@@ -214,7 +217,25 @@ function App() {
           });
       }
     }
-  }, [updateData, restoreAIConfig, restoreSiteSettings, isPrivateUnlocked, notify, privateVaultPassword]);
+
+    if (data.links && data.categories) {
+      prevSyncDataRef.current = JSON.stringify(buildSyncData(
+        data.links,
+        data.categories,
+        data.searchConfig,
+        data.aiConfig,
+        data.siteSettings,
+        data.privateVault
+      ));
+    }
+  }, [
+    updateData,
+    restoreAIConfig,
+    restoreSiteSettings,
+    isPrivateUnlocked,
+    notify,
+    privateVaultPassword
+  ]);
 
   const handleSyncError = useCallback((error: string) => {
     console.error('[Sync Error]', error);
@@ -903,6 +924,7 @@ function App() {
     // 只在本地数据加载完成后执行一次
     if (!isLoaded || hasInitialSyncRun.current) return;
     hasInitialSyncRun.current = true;
+    hasInitialCloudCheckCompletedRef.current = false;
 
     const checkCloudData = async () => {
       const localMeta = getLocalSyncMeta();
@@ -935,7 +957,9 @@ function App() {
       }
     };
 
-    checkCloudData();
+    checkCloudData().finally(() => {
+      hasInitialCloudCheckCompletedRef.current = true;
+    });
   }, [isLoaded, pullFromCloud, links, categories, searchMode, externalSearchSources, aiConfig, siteSettings, privateVaultCipher, buildSyncData, handleSyncConflict, getLocalSyncMeta, handleSyncComplete]);
 
   // === KV Sync: Auto-sync on data change ===
@@ -944,6 +968,7 @@ function App() {
   useEffect(() => {
     // 跳过初始加载阶段
     if (!isLoaded || !hasInitialSyncRun.current || currentConflict) return;
+    if (!hasInitialCloudCheckCompletedRef.current) return;
     if (isSyncPasswordRefreshingRef.current) return;
     if (isReadOnly) return;
 
@@ -956,6 +981,12 @@ function App() {
       privateVaultCipher || undefined
     );
     const serialized = JSON.stringify(syncData);
+
+    if (suppressNextAutoSyncRef.current) {
+      suppressNextAutoSyncRef.current = false;
+      prevSyncDataRef.current = serialized;
+      return;
+    }
 
     if (serialized !== prevSyncDataRef.current) {
       prevSyncDataRef.current = serialized;
@@ -1199,9 +1230,9 @@ function App() {
       {/* Sync Status Indicator - Fixed bottom right */}
       <div className="fixed bottom-4 right-4 z-30">
         <SyncStatusIndicator
-          status={syncStatus}
+          status={isReadOnly && (syncStatus === 'error' || syncStatus === 'pending') ? 'idle' : syncStatus}
           lastSyncTime={lastSyncTime}
-          onManualSync={() => {
+          onManualSync={isReadOnly ? undefined : () => {
             if (!ensureEditable('同步')) return;
             handleManualSync();
           }}
